@@ -9,8 +9,8 @@ const nextConfig: NextConfig = {
     unoptimized: true,
   },
   
-  // Enable typed routes
-  typedRoutes: true,
+  // Disable typed routes for flexibility
+  // typedRoutes: true,
 };
 
 export default nextConfig;

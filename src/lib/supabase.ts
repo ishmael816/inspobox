@@ -1,21 +1,23 @@
-import { createBrowserClient } from "@supabase/ssr";
+// 浏览器端数据操作 - 用于 Client Components
+import { createClient } from "./supabase-client";
 import { Fragment, Story, Tag, AIAnalysisResult, AIAnalysisHistory } from "@/types";
 
-function getSupabase() {
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-
-  if (!supabaseUrl || !supabaseKey) {
-    throw new Error("Missing Supabase environment variables");
+// 获取当前用户ID（客户端）
+async function getCurrentUserId(): Promise<string> {
+  const supabase = createClient();
+  const { data: { user }, error } = await supabase.auth.getUser();
+  
+  if (error || !user) {
+    throw new Error("User not authenticated");
   }
-
-  return createBrowserClient(supabaseUrl, supabaseKey);
+  
+  return user.id;
 }
 
 // ==================== Stories ====================
 
 export async function getStories(): Promise<Story[]> {
-  const supabase = getSupabase();
+  const supabase = createClient();
   const { data, error } = await supabase
     .from("stories")
     .select("*")
@@ -26,10 +28,17 @@ export async function getStories(): Promise<Story[]> {
 }
 
 export async function createStory(title: string, description?: string, color?: string): Promise<Story> {
-  const supabase = getSupabase();
+  const supabase = createClient();
+  const userId = await getCurrentUserId();
+  
   const { data, error } = await supabase
     .from("stories")
-    .insert({ title, description, color: color || '#171717' })
+    .insert({ 
+      title, 
+      description, 
+      color: color || '#171717',
+      user_id: userId
+    })
     .select()
     .single();
 
@@ -40,29 +49,30 @@ export async function createStory(title: string, description?: string, color?: s
 // ==================== Tags ====================
 
 export async function getTags(): Promise<Tag[]> {
-  try {
-    const supabase = getSupabase();
-    const { data, error } = await supabase
-      .from("tags")
-      .select("*")
-      .order("name", { ascending: true });
+  const supabase = createClient();
+  const { data, error } = await supabase
+    .from("tags")
+    .select("*")
+    .order("name", { ascending: true });
 
-    if (error) {
-      console.warn("getTags error (table may not exist):", error);
-      return [];
-    }
-    return data || [];
-  } catch (error) {
-    console.warn("getTags exception:", error);
+  if (error) {
+    console.warn("getTags error:", error);
     return [];
   }
+  return data || [];
 }
 
 export async function createTag(name: string, color?: string): Promise<Tag> {
-  const supabase = getSupabase();
+  const supabase = createClient();
+  const userId = await getCurrentUserId();
+  
   const { data, error } = await supabase
     .from("tags")
-    .insert({ name: name.trim(), color: color || '#6b7280' })
+    .insert({ 
+      name: name.trim(), 
+      color: color || '#6b7280',
+      user_id: userId
+    })
     .select()
     .single();
 
@@ -71,37 +81,29 @@ export async function createTag(name: string, color?: string): Promise<Tag> {
 }
 
 export async function addTagToFragment(fragmentId: string, tagId: string): Promise<void> {
-  try {
-    const supabase = getSupabase();
-    const { error } = await supabase
-      .from("fragment_tags")
-      .insert({ fragment_id: fragmentId, tag_id: tagId });
-    if (error) throw error;
-  } catch (error) {
-    console.error("addTagToFragment error:", error);
-    throw error;
-  }
+  const supabase = createClient();
+  const { error } = await supabase
+    .from("fragment_tags")
+    .insert({ fragment_id: fragmentId, tag_id: tagId });
+  
+  if (error) throw error;
 }
 
 export async function removeTagFromFragment(fragmentId: string, tagId: string): Promise<void> {
-  try {
-    const supabase = getSupabase();
-    const { error } = await supabase
-      .from("fragment_tags")
-      .delete()
-      .eq("fragment_id", fragmentId)
-      .eq("tag_id", tagId);
-    if (error) throw error;
-  } catch (error) {
-    console.error("removeTagFromFragment error:", error);
-    throw error;
-  }
+  const supabase = createClient();
+  const { error } = await supabase
+    .from("fragment_tags")
+    .delete()
+    .eq("fragment_id", fragmentId)
+    .eq("tag_id", tagId);
+  
+  if (error) throw error;
 }
 
 // ==================== Fragments ====================
 
 export async function getFragments(storyId?: string, tagId?: string): Promise<Fragment[]> {
-  const supabase = getSupabase();
+  const supabase = createClient();
   
   try {
     let query = supabase
@@ -124,7 +126,7 @@ export async function getFragments(storyId?: string, tagId?: string): Promise<Fr
 
     if (error) throw error;
 
-    // 单独获取每个碎片的标签（避免关联查询问题）
+    // 单独获取每个碎片的标签
     const fragmentsWithTags = await Promise.all(
       (data || []).map(async (fragment: any) => {
         try {
@@ -155,7 +157,7 @@ export async function getFragments(storyId?: string, tagId?: string): Promise<Fr
     return fragmentsWithTags;
   } catch (error) {
     console.error("getFragments error:", error);
-    // 降级方案：只获取基础数据
+    // 降级方案
     const { data } = await supabase
       .from("fragments")
       .select(`*, story:stories(*)`)
@@ -165,12 +167,17 @@ export async function getFragments(storyId?: string, tagId?: string): Promise<Fr
 }
 
 export async function createFragment(content: string, storyId?: string, tagIds?: string[]): Promise<Fragment> {
-  const supabase = getSupabase();
+  const supabase = createClient();
+  const userId = await getCurrentUserId();
   
   // 创建碎片
   const { data: fragment, error } = await supabase
     .from("fragments")
-    .insert({ content, story_id: storyId || null })
+    .insert({ 
+      content, 
+      story_id: storyId || null,
+      user_id: userId
+    })
     .select(`
       *,
       story:stories(*)
@@ -179,7 +186,7 @@ export async function createFragment(content: string, storyId?: string, tagIds?:
 
   if (error) throw error;
 
-  // 添加标签关联（如果表存在）
+  // 添加标签关联
   if (tagIds && tagIds.length > 0) {
     try {
       const tagRelations = tagIds.map(tagId => ({
@@ -192,7 +199,7 @@ export async function createFragment(content: string, storyId?: string, tagIds?:
     }
   }
 
-  // 获取标签（单独查询）
+  // 获取标签
   let tags: Tag[] = [];
   try {
     const { data: tagData } = await supabase
@@ -211,7 +218,7 @@ export async function createFragment(content: string, storyId?: string, tagIds?:
 }
 
 export async function updateFragmentStory(fragmentId: string, storyId?: string): Promise<Fragment> {
-  const supabase = getSupabase();
+  const supabase = createClient();
   
   const { data, error } = await supabase
     .from("fragments")
@@ -219,16 +226,27 @@ export async function updateFragmentStory(fragmentId: string, storyId?: string):
     .eq('id', fragmentId)
     .select(`
       *,
-      story:stories(*),
-      tags:fragment_tags(tag:tags(*))
+      story:stories(*)
     `)
     .single();
 
   if (error) throw error;
 
+  // 获取标签
+  let tags: Tag[] = [];
+  try {
+    const { data: tagData } = await supabase
+      .from("fragment_tags")
+      .select(`tag:tags(*)`)
+      .eq("fragment_id", fragmentId);
+    tags = tagData?.map((t: any) => t.tag).filter(Boolean) || [];
+  } catch {
+    tags = [];
+  }
+
   return {
     ...data,
-    tags: data.tags?.map((t: any) => t.tag).filter(Boolean) || []
+    tags
   };
 }
 
@@ -237,7 +255,7 @@ export async function deleteFragment(fragmentId: string): Promise<void> {
     throw new Error(`Invalid fragmentId: ${fragmentId}`);
   }
   
-  const supabase = getSupabase();
+  const supabase = createClient();
   console.log('[deleteFragment] Attempting to delete fragment:', fragmentId);
   
   // 首先检查记录是否存在
@@ -280,7 +298,7 @@ export async function deleteFragments(fragmentIds: string[]): Promise<void> {
     throw new Error(`Invalid fragmentIds: ${fragmentIds}`);
   }
   
-  const supabase = getSupabase();
+  const supabase = createClient();
   console.log('[deleteFragments] Attempting to delete fragments:', fragmentIds);
   
   const { data, error } = await supabase
@@ -306,7 +324,7 @@ export async function deleteFragments(fragmentIds: string[]): Promise<void> {
 
 // 更新碎片排序
 export async function updateFragmentOrder(fragmentId: string, sortOrder: number): Promise<void> {
-  const supabase = getSupabase();
+  const supabase = createClient();
   const { error } = await supabase
     .from("fragments")
     .update({ sort_order: sortOrder })
@@ -317,9 +335,8 @@ export async function updateFragmentOrder(fragmentId: string, sortOrder: number)
 
 // 批量更新排序
 export async function updateFragmentsOrder(updates: { id: string; sort_order: number }[]): Promise<void> {
-  const supabase = getSupabase();
+  const supabase = createClient();
   
-  // 逐个更新（Supabase 不支持批量 update 不同值）
   for (const update of updates) {
     const { error } = await supabase
       .from("fragments")
@@ -340,7 +357,9 @@ export async function createAIHistory(
   rawText?: string,
   targetFragmentId?: string
 ) {
-  const supabase = getSupabase();
+  const supabase = createClient();
+  const userId = await getCurrentUserId();
+  
   const { data, error } = await supabase
     .from("ai_analysis_history")
     .insert({
@@ -348,6 +367,7 @@ export async function createAIHistory(
       target_fragment_id: targetFragmentId,
       result,
       raw_text: rawText,
+      user_id: userId
     })
     .select()
     .single();
@@ -357,7 +377,7 @@ export async function createAIHistory(
 }
 
 export async function getAIHistory(limit: number = 20): Promise<AIAnalysisHistory[]> {
-  const supabase = getSupabase();
+  const supabase = createClient();
   const { data, error } = await supabase
     .from("ai_analysis_history")
     .select("*")
@@ -369,7 +389,7 @@ export async function getAIHistory(limit: number = 20): Promise<AIAnalysisHistor
 }
 
 export async function deleteAIHistory(id: string): Promise<void> {
-  const supabase = getSupabase();
+  const supabase = createClient();
   const { error } = await supabase
     .from("ai_analysis_history")
     .delete()

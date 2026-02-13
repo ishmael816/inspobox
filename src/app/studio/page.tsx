@@ -16,6 +16,7 @@ import { Fragment, Story, Tag, AIAnalysisHistory } from "@/types";
 import { FragmentCard } from "./components/FragmentCard";
 import { AISidebar } from "./components/AISidebar";
 import { AIHistoryPanel } from "./components/AIHistoryPanel";
+import { UserMenu } from "@/components/UserMenu";
 
 const springTransition = {
   type: "spring" as const,
@@ -267,6 +268,9 @@ export default function StudioPage() {
             <motion.a href="/" className="text-sm text-muted hover:text-foreground transition-colors px-4 py-2 rounded-full hover:bg-border/50" whileHover={{ scale: 1.05, x: -4 }} whileTap={{ scale: 0.95 }}>
               ← 返回捕捉
             </motion.a>
+            
+            {/* 用户菜单 */}
+            <UserMenu />
           </div>
         </div>
 

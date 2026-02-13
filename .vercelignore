@@ -1,0 +1,30 @@
+# 忽略本地开发文件
+node_modules
+.next
+.env.local
+.env.*.local
+
+# 忽略 IDE
+.idea
+.vscode
+*.swp
+*.swo
+
+# 忽略日志
+*.log
+npm-debug.log*
+
+# 忽略测试文件
+*.test.ts
+*.test.tsx
+*.spec.ts
+*.spec.tsx
+
+# 忽略文档
+*.md
+!README.md
+AUTH_SETUP.md
+
+# 忽略其他
+.git
+.gitignore
