@@ -147,22 +147,141 @@ DASHSCOPE_API_KEY=your_dashscope_api_key  # AI功能
 
 ---
 
-## 六、部署尝试
+## 六、部署教程
 
-### 1. Vercel 部署
-- 成功部署到 `inspobox-nu.vercel.app`
-- 配置了香港区域 (`hkg1`)
-- 绑定了腾讯云域名 `quizcraft.site`
-- **问题**: 香港地区访问 Vercel 超时
+### 方式一：Vercel CLI 部署
 
-### 2. Railway 部署
-- 创建了项目 `outstanding-courage`
-- **问题**: Node.js 版本过低（Railway 默认 v18，项目需要 v20）
-- 尝试通过 `nixpacks.toml` 指定 Node 20
+#### 1. 安装 Vercel CLI
+```bash
+npm i -g vercel
+```
+
+#### 2. 登录 Vercel
+```bash
+vercel login
+# 按提示在浏览器完成授权
+```
+
+#### 3. 部署项目
+```bash
+# 在项目根目录执行
+vercel --prod
+```
+
+#### 4. 配置环境变量
+在 Vercel Dashboard → Project Settings → Environment Variables 中添加：
+```
+NEXT_PUBLIC_SUPABASE_URL=https://gegzyyobfgvdnvycsaop.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+DASHSCOPE_API_KEY=your_dashscope_api_key
+```
+
+#### 5. 配置 Supabase
+访问 https://app.supabase.com → 你的项目 → Authentication → URL Configuration：
+- **Site URL**: `https://你的项目名.vercel.app`
+- **Redirect URLs**: `https://你的项目名.vercel.app/**`
+
+#### 6. 绑定自定义域名（可选）
+```bash
+vercel domains add yourdomain.com
+```
+然后在 DNS 提供商添加 CNAME 记录指向 `cname.vercel-dns.com`
 
 ---
 
-## 七、文件变更清单
+### 方式二：Railway CLI 部署
+
+#### 1. 安装 Railway CLI
+```bash
+npm install -g @railway/cli
+```
+
+#### 2. 登录 Railway
+```bash
+railway login
+# 按提示在浏览器完成授权
+```
+
+#### 3. 初始化项目
+```bash
+# 进入项目目录
+cd D:\Projects\inspobox
+
+# 初始化 Railway 项目
+railway init
+# 选择 "Create a new project" 创建新项目
+```
+
+#### 4. 设置环境变量
+```bash
+railway variables set NEXT_PUBLIC_SUPABASE_URL="https://gegzyyobfgvdnvycsaop.supabase.co"
+railway variables set NEXT_PUBLIC_SUPABASE_ANON_KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+railway variables set DASHSCOPE_API_KEY="your_api_key"
+```
+
+#### 5. 部署
+```bash
+railway up
+```
+
+#### 6. 获取域名
+```bash
+railway domain
+```
+
+#### 7. 配置 Supabase
+访问 https://app.supabase.com → 你的项目 → Authentication → URL Configuration：
+- **Site URL**: `https://你的项目名.up.railway.app`
+- **Redirect URLs**: `https://你的项目名.up.railway.app/**`
+
+---
+
+### 方式三：Railway Dashboard 部署（推荐）
+
+#### 1. 推送代码到 GitHub
+```bash
+git add .
+git commit -m "ready for deploy"
+git push
+```
+
+#### 2. Railway Dashboard 配置
+1. 访问 https://railway.app/new
+2. 点击 **Deploy from GitHub repo**
+3. 选择你的仓库 `ishmael816/inspobox`
+4. 点击 **Add Variables** 添加环境变量：
+   - `NEXT_PUBLIC_SUPABASE_URL`
+   - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+   - `DASHSCOPE_API_KEY`（可选）
+5. 点击 **Deploy**
+
+#### 3. 生成域名
+部署完成后，在 Dashboard → 你的服务 → Settings → Domains → Generate Domain
+
+#### 4. 绑定自定义域名（可选）
+1. Railway Dashboard → 你的服务 → Settings → Domains
+2. 点击 **Custom Domain**
+3. 输入你的域名：`inspobox.quizcraft.site`
+4. 按提示配置 DNS CNAME 记录
+
+---
+
+## 七、部署问题记录
+
+### Vercel 部署
+- **成功**: 部署到 `inspobox-nu.vercel.app`
+- **配置**: 香港区域 (`hkg1`)、腾讯云域名
+- **问题**: 香港地区访问 Vercel 超时 (ERR_CONNECTION_TIMED_OUT)
+
+### Railway 部署
+- **创建**: 项目 `outstanding-courage`
+- **问题**: Node.js 版本过低（Railway 默认 v18，项目需要 v20）
+- **解决尝试**: 添加 `nixpacks.toml` 指定 Node 20
+- **状态**: 等待部署完成
+
+---
+
+## 八、文件变更清单
 
 ### 新增文件
 ```
@@ -186,6 +305,7 @@ DEPLOY.md
 DEPLOY_DOMAIN.md
 RAILWAY_DEPLOY.md
 CDN_SETUP.md
+TODAY_WORK_SUMMARY.md
 ```
 
 ### 修改文件
@@ -200,26 +320,6 @@ supabase/seed_stories.sql
 supabase/seed.sql
 README.md
 ```
-
----
-
-## 八、下一步建议
-
-### 部署方案选择
-1. **腾讯云服务器**（轻量应用服务器）- 最稳定
-2. **Cloudflare Pages** - 国内访问较快，需要适配静态导出
-3. **Railway** - 等待 Node 20 支持或降级项目依赖
-
-### 功能完善
-1. 邮箱验证功能
-2. 忘记密码功能
-3. 用户资料设置
-4. 邀请码注册（控制用户数量）
-
-### 安全加固
-1. 启用 Supabase 邮箱验证
-2. 添加登录失败限制
-3. 配置 HTTPS 强制跳转
 
 ---
 
