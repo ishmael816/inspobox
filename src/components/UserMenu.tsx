@@ -39,7 +39,7 @@ export function UserMenu() {
     try {
       const response = await fetch("/api/auth/signout", { method: "POST" });
       if (response.ok) {
-        router.push("/login");
+        router.push("/login" as any);
         router.refresh();
       }
     } catch (error) {

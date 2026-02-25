@@ -87,9 +87,12 @@ export default function Home() {
         setShowTagInput(false);
         controls.set("initial");
       }, 1200);
-    } catch (error) {
+    } catch (error: any) {
       console.error("Failed to save:", error);
-      alert("保存失败");
+      console.error("Error details:", JSON.stringify(error, null, 2));
+      console.error("Error message:", error?.message);
+      console.error("Error code:", error?.code);
+      alert("保存失败: " + (error?.message || "未知错误"));
       setFlyingText(null);
       setIsSubmitting(false);
       controls.set("initial");
@@ -416,7 +419,7 @@ export default function Home() {
 
       {/* 隐藏入口 */}
       <motion.a
-        href="/studio"
+        href={"/studio" as any}
         className="fixed bottom-6 right-6 w-12 h-12 rounded-full bg-foreground/5 hover:bg-foreground/10 flex items-center justify-center text-muted/30 hover:text-muted/60"
         initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ delay: 0.5 }}
         whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.8 }}

@@ -56,7 +56,7 @@ export default function RegisterPage() {
       
       // 3秒后跳转到登录页
       setTimeout(() => {
-        router.push("/login");
+        router.push("/login" as any);
       }, 3000);
     } catch (err: any) {
       setError(err.message || "注册失败，请稍后重试");
@@ -230,7 +230,7 @@ export default function RegisterPage() {
           transition={{ delay: 0.6 }}
         >
           已有账号？{" "}
-          <Link href="/login" className="text-foreground hover:underline">
+          <Link href={"/login" as any} className="text-foreground hover:underline">
             立即登录
           </Link>
         </motion.p>

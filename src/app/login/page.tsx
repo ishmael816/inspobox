@@ -188,7 +188,7 @@ function LoginForm() {
           transition={{ delay: 0.6 }}
         >
           还没有账号？{" "}
-          <Link href="/register" className="text-foreground hover:underline">
+          <Link href={"/register" as any} className="text-foreground hover:underline">
             立即注册
           </Link>
         </motion.p>
