@@ -1,16 +1,17 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  // Static export for easy deployment (can be removed if using server features)
-  // output: 'export',
+  // Static export for Capacitor mobile app
+  output: 'export',
+  distDir: 'dist',
   
   // Image optimization settings
   images: {
     unoptimized: true,
   },
   
-  // Disable typed routes for flexibility
-  // typedRoutes: true,
+  // Trailing slash for static export
+  trailingSlash: true,
 };
 
 export default nextConfig;
