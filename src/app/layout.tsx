@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
+import { MobileInitializer } from "@/components/MobileInitializer";
 
 const inter = Inter({
   variable: "--font-inter",
@@ -37,6 +38,7 @@ export default function RootLayout({
   return (
     <html lang="zh-CN">
       <body className={`${inter.variable} font-sans antialiased`}>
+        <MobileInitializer />
         {children}
       </body>
     </html>

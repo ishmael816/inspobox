@@ -37,11 +37,10 @@ export function UserMenu() {
   const handleSignOut = async () => {
     setSigningOut(true);
     try {
-      const response = await fetch("/api/auth/signout", { method: "POST" });
-      if (response.ok) {
-        router.push("/login" as any);
-        router.refresh();
-      }
+      const supabase = createClient();
+      await supabase.auth.signOut();
+      router.push("/login");
+      router.refresh();
     } catch (error) {
       console.error("Sign out failed:", error);
     } finally {
