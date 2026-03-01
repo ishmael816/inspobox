@@ -11,8 +11,12 @@ import {
   deleteFragments,
   addTagToFragment,
   removeTagFromFragment,
+  SearchResult,
 } from "@/lib/supabase";
 import { Fragment, Story, Tag, AIAnalysisHistory } from "@/types";
+import { SearchBar } from "@/components/SearchBar";
+import { BatchActions } from "@/components/BatchActions";
+import { RelationExplorer } from "@/components/RelationExplorer";
 import { FragmentCard } from "./components/FragmentCard";
 import { AISidebar } from "./components/AISidebar";
 import { AIHistoryPanel } from "./components/AIHistoryPanel";
@@ -33,6 +37,7 @@ export default function StudioPage() {
   const [loading, setLoading] = useState(true);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [showAI, setShowAI] = useState(false);
+  const [showRelationExplorer, setShowRelationExplorer] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
   const [selectedHistory, setSelectedHistory] = useState<AIAnalysisHistory | null>(null);
   const [historyRefreshKey, setHistoryRefreshKey] = useState(0);
@@ -42,6 +47,8 @@ export default function StudioPage() {
   const [isEditMode, setIsEditMode] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState<string | string[] | null>(null);
   const [showFilters, setShowFilters] = useState(false);
+  const [searchResult, setSearchResult] = useState<SearchResult | null>(null);
+  const [isSearching, setIsSearching] = useState(false);
 
   const loadData = useCallback(async () => {
     try {
@@ -76,8 +83,23 @@ export default function StudioPage() {
     });
   };
 
-  // 筛选
+  // 处理搜索结果
+  const handleSearchResults = useCallback((result: SearchResult) => {
+    setSearchResult(result);
+    setIsSearching(false);
+  }, []);
+
+  const handleClearSearch = useCallback(() => {
+    setSearchResult(null);
+    loadData(); // 重新加载所有数据
+  }, [loadData]);
+
+  // 筛选（包括搜索结果）
   const filteredFragments = useMemo(() => {
+    // 如果有搜索结果，优先使用搜索结果
+    if (searchResult?.fragments) {
+      return searchResult.fragments;
+    }
     let result = fragments.filter((f) => {
       if (selectedStoryId === "untagged") {
         if (f.story_id) return false;
@@ -109,7 +131,7 @@ export default function StudioPage() {
     }
 
     return result;
-  }, [fragments, selectedStoryId, selectedTagId, sortBy]);
+  }, [fragments, selectedStoryId, selectedTagId, sortBy, searchResult]);
 
   // 响应式列数
   const [columnCount, setColumnCount] = useState(2);
@@ -232,7 +254,14 @@ export default function StudioPage() {
           <motion.div initial={{ x: -20, opacity: 0 }} animate={{ x: 0, opacity: 1 }} transition={{ ...springTransition, delay: 0.1 }}>
             <h1 className="text-2xl font-medium mb-2">创作工作室</h1>
             <motion.p className="text-muted text-sm" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.2 }}>
-              共 {filteredFragments.length} 个灵感碎片
+              {searchResult ? (
+                <>
+                  搜索 &quot;{searchResult.query}&quot; 找到 {searchResult.total} 个结果
+                  {searchResult.has_more && "（显示前 " + filteredFragments.length + " 个）"}
+                </>
+              ) : (
+                <>共 {filteredFragments.length} 个灵感碎片</>
+              )}
               {selectedIds.size > 0 && (
                 <motion.span initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} className="ml-2 text-foreground font-medium">
                   · 已选择 {selectedIds.size} 个
@@ -242,6 +271,15 @@ export default function StudioPage() {
           </motion.div>
           
           <div className="flex items-center gap-2">
+            {/* 搜索框 */}
+            <div className="hidden sm:block w-64">
+              <SearchBar 
+                onSearchResults={handleSearchResults}
+                onClearSearch={handleClearSearch}
+                selectedStoryId={selectedStoryId}
+              />
+            </div>
+            
             {/* 历史记录按钮 */}
             <motion.button
               onClick={() => setShowHistory(true)}
@@ -357,6 +395,15 @@ export default function StudioPage() {
               exit={{ opacity: 0, height: 0 }}
               transition={{ duration: 0.2 }}
             >
+              {/* 移动端搜索框 */}
+              <div className="sm:hidden w-full mb-2">
+                <SearchBar 
+                  onSearchResults={handleSearchResults}
+                  onClearSearch={handleClearSearch}
+                  selectedStoryId={selectedStoryId}
+                />
+              </div>
+              
               {/* 标签筛选 */}
               <div className="flex items-center gap-2 flex-wrap">
                 <span className="text-xs text-muted mr-1">标签筛选</span>
@@ -408,18 +455,16 @@ export default function StudioPage() {
           )}
         </AnimatePresence>
 
-        {/* 批量操作栏 */}
+        {/* 批量操作栏 - 使用新的 BatchActions 组件 */}
         <AnimatePresence>
           {isEditMode && selectedIds.size > 0 && (
-            <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }} className="flex items-center gap-3 pt-4 border-t border-border/50">
-              <span className="text-sm text-muted">已选择 {selectedIds.size} 个</span>
-              <motion.button onClick={() => setShowDeleteConfirm(Array.from(selectedIds))} className="px-4 py-1.5 bg-red-500 text-white rounded-full text-sm hover:bg-red-600 transition-colors" whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
-                批量删除
-              </motion.button>
-              <motion.button onClick={() => setSelectedIds(new Set())} className="px-4 py-1.5 text-muted hover:text-foreground rounded-full text-sm transition-colors" whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
-                取消选择
-              </motion.button>
-            </motion.div>
+            <BatchActions
+              selectedIds={selectedIds}
+              stories={stories}
+              tags={tags}
+              onClearSelection={() => setSelectedIds(new Set())}
+              onActionComplete={loadData}
+            />
           )}
         </AnimatePresence>
 
@@ -483,6 +528,30 @@ export default function StudioPage() {
 
 
 
+      {/* 关联探索按钮 */}
+      {!isEditMode && filteredFragments.length > 0 && (
+        <motion.button
+          onClick={() => setShowRelationExplorer(true)}
+          className="fixed bottom-6 right-24 w-14 h-14 bg-gradient-to-br from-violet-500 to-purple-600 text-white rounded-full 
+                   flex items-center justify-center shadow-lg z-30"
+          initial={{ scale: 0, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+          exit={{ scale: 0, opacity: 0 }}
+          transition={{ type: "spring", stiffness: 500, damping: 25, delay: 0.1 }}
+          whileHover={{ scale: 1.1 }}
+          whileTap={{ scale: 0.9 }}
+        >
+          <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} 
+                  d="M13 10V3L4 14h7v7l9-11h-7z" />
+          </svg>
+          <span className="absolute -top-8 left-1/2 -translate-x-1/2 bg-violet-600 text-white text-xs px-2 py-1 
+                         rounded whitespace-nowrap opacity-0 hover:opacity-100 transition-opacity">
+            关联探索
+          </span>
+        </motion.button>
+      )}
+
       {/* AI 按钮 */}
       {!isEditMode && (
         <AnimatePresence>
@@ -490,7 +559,7 @@ export default function StudioPage() {
             <motion.button
               onClick={() => setShowAI(true)}
               disabled={selectedIds.size === 0}
-              className="fixed bottom-6 right-6 w-14 h-14 bg-foreground text-background rounded-full flex items-center justify-center shadow-lg disabled:opacity-30 disabled:cursor-not-allowed"
+              className="fixed bottom-6 right-6 w-14 h-14 bg-foreground text-background rounded-full flex items-center justify-center shadow-lg disabled:opacity-30 disabled:cursor-not-allowed z-30"
               initial={{ scale: 0, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0, opacity: 0 }}
               transition={{ type: "spring", stiffness: 500, damping: 25, delay: 0.2 }}
               whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.8 }}
@@ -565,6 +634,13 @@ export default function StudioPage() {
           setShowAI(true);
         }}
         key={historyRefreshKey}
+      />
+
+      {/* Relation Explorer */}
+      <RelationExplorer
+        fragments={fragments}
+        isOpen={showRelationExplorer}
+        onClose={() => setShowRelationExplorer(false)}
       />
 
     </main>

@@ -1,0 +1,1487 @@
+openapi: 3.1.0
+info:
+  title: InspoBox API
+  description: |
+    灵感收集器 - 个人小说灵感收集与管理 API
+    
+    ## 功能特性
+    - ✨ 灵感捕捉 - 快速记录创作灵感
+    - 📚 故事管理 - 按故事组织灵感碎片
+    - 🏷️ 标签系统 - 多维度分类
+    - 🤖 AI 辅助 - 智能重组与创作建议
+    - 👤 多用户支持 - 数据完全隔离
+    
+  version: 1.0.0
+  contact:
+    name: InspoBox Team
+servers:
+  - url: http://localhost:3000/api
+    description: 本地开发环境
+  - url: https://inspobox.vercel.app/api
+    description: 生产环境
+
+security:
+  - BearerAuth: []
+  - CookieAuth: []
+
+tags:
+  - name: Authentication
+    description: 用户认证相关
+  - name: Fragments
+    description: 灵感碎片管理
+  - name: Stories
+    description: 故事管理
+  - name: Tags
+    description: 标签管理
+  - name: AI
+    description: AI 分析与重组
+  - name: Search
+    description: 搜索功能
+
+paths:
+  # ========== Authentication ==========
+  /auth/signout:
+    post:
+      tags:
+        - Authentication
+      summary: 用户登出
+      description: 清除用户会话，退出登录
+      operationId: signOut
+      responses:
+        '200':
+          description: 登出成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  # ========== AI Analysis ==========
+  /analyze:
+    post:
+      tags:
+        - AI
+      summary: AI 灵感重组分析
+      description: |
+        使用阿里云通义千问 AI 对选中的灵感碎片进行智能分析，
+        发现碎片之间的关联关系，并提供创作建议。
+        
+        采用流式响应 (SSE) 返回分析结果。
+      operationId: analyzeFragments
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AIAnalyzeRequest'
+      responses:
+        '200':
+          description: 流式分析结果
+          content:
+            text/event-stream:
+              schema:
+                type: string
+                description: SSE 流式响应，格式为 Vercel AI SDK 协议
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  # ========== Fragments (Client-side via Supabase) ==========
+  /fragments:
+    get:
+      tags:
+        - Fragments
+      summary: 获取灵感碎片列表
+      description: 获取当前用户的所有灵感碎片，支持按故事和标签筛选
+      operationId: getFragments
+      parameters:
+        - name: story_id
+          in: query
+          schema:
+            type: string
+          description: 按故事 ID 筛选
+        - name: tag_id
+          in: query
+          schema:
+            type: string
+          description: 按标签 ID 筛选
+        - name: sort_by
+          in: query
+          schema:
+            type: string
+            enum: [newest, oldest, random]
+            default: newest
+          description: 排序方式
+      responses:
+        '200':
+          description: 碎片列表
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Fragment'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+    post:
+      tags:
+        - Fragments
+      summary: 创建灵感碎片
+      description: 创建新的灵感碎片，可选关联故事和标签
+      operationId: createFragment
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateFragmentRequest'
+      responses:
+        '201':
+          description: 创建成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Fragment'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /fragments/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+
+    get:
+      tags:
+        - Fragments
+      summary: 获取单个碎片
+      operationId: getFragment
+      responses:
+        '200':
+          description: 碎片详情
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Fragment'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    patch:
+      tags:
+        - Fragments
+      summary: 更新碎片
+      description: 更新碎片内容或所属故事
+      operationId: updateFragment
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateFragmentRequest'
+      responses:
+        '200':
+          description: 更新成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Fragment'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    delete:
+      tags:
+        - Fragments
+      summary: 删除碎片
+      operationId: deleteFragment
+      responses:
+        '204':
+          description: 删除成功
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /fragments/batch-delete:
+    post:
+      tags:
+        - Fragments
+      summary: 批量删除碎片
+      operationId: deleteFragments
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                ids:
+                  type: array
+                  items:
+                    type: string
+                    format: uuid
+                  minItems: 1
+      responses:
+        '204':
+          description: 删除成功
+
+  /fragments/batch-update:
+    post:
+      tags:
+        - Fragments
+      summary: 批量更新碎片
+      description: 批量移动碎片到指定故事或添加/移除标签
+      operationId: batchUpdateFragments
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BatchUpdateFragmentsRequest'
+      responses:
+        '200':
+          description: 更新成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  updated:
+                    type: integer
+                    description: 更新的碎片数量
+                  failed:
+                    type: integer
+                    description: 失败的碎片数量
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /fragments/{id}/tags:
+    post:
+      tags:
+        - Fragments
+        - Tags
+      summary: 为碎片添加标签
+      operationId: addTagToFragment
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                tag_id:
+                  type: string
+                  format: uuid
+              required: [tag_id]
+      responses:
+        '201':
+          description: 添加成功
+
+    delete:
+      tags:
+        - Fragments
+        - Tags
+      summary: 移除碎片标签
+      operationId: removeTagFromFragment
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: tag_id
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: 移除成功
+
+  # ========== Stories ==========
+  /stories:
+    get:
+      tags:
+        - Stories
+      summary: 获取故事列表
+      operationId: getStories
+      responses:
+        '200':
+          description: 故事列表
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Story'
+
+    post:
+      tags:
+        - Stories
+      summary: 创建故事
+      operationId: createStory
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateStoryRequest'
+      responses:
+        '201':
+          description: 创建成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Story'
+
+  /stories/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+
+    get:
+      tags:
+        - Stories
+      summary: 获取故事详情
+      operationId: getStory
+      responses:
+        '200':
+          description: 故事详情
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Story'
+
+    patch:
+      tags:
+        - Stories
+      summary: 更新故事
+      operationId: updateStory
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateStoryRequest'
+      responses:
+        '200':
+          description: 更新成功
+
+    delete:
+      tags:
+        - Stories
+      summary: 删除故事
+      operationId: deleteStory
+      responses:
+        '204':
+          description: 删除成功
+
+  # ========== Tags ==========
+  /tags:
+    get:
+      tags:
+        - Tags
+      summary: 获取标签列表
+      operationId: getTags
+      responses:
+        '200':
+          description: 标签列表
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Tag'
+
+    post:
+      tags:
+        - Tags
+      summary: 创建标签
+      operationId: createTag
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateTagRequest'
+      responses:
+        '201':
+          description: 创建成功
+
+  /tags/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+
+    delete:
+      tags:
+        - Tags
+      summary: 删除标签
+      operationId: deleteTag
+      responses:
+        '204':
+          description: 删除成功
+
+  # ========== Search ==========
+  /search:
+    get:
+      tags:
+        - Search
+      summary: 搜索灵感碎片
+      description: |
+        全文搜索灵感碎片，支持按内容、故事名、标签名搜索。
+        结果按相关性和时间排序。
+      operationId: searchFragments
+      parameters:
+        - name: q
+          in: query
+          required: true
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 200
+          description: 搜索关键词
+        - name: story_id
+          in: query
+          schema:
+            type: string
+          description: 限制搜索范围到指定故事
+        - name: tag_ids
+          in: query
+          schema:
+            type: array
+            items:
+              type: string
+          description: 限制搜索范围到指定标签
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 20
+            maximum: 100
+          description: 返回结果数量
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            default: 0
+          description: 分页偏移量
+      responses:
+        '200':
+          description: 搜索结果
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SearchResult'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /search/suggestions:
+    get:
+      tags:
+        - Search
+      summary: 获取搜索建议
+      description: 根据输入内容返回搜索建议（标签、故事）
+      operationId: getSearchSuggestions
+      parameters:
+        - name: q
+          in: query
+          required: true
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 50
+          description: 搜索前缀
+      responses:
+        '200':
+          description: 搜索建议
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SearchSuggestions'
+
+  # ========== AI History ==========
+  /ai-history:
+    get:
+      tags:
+        - AI
+      summary: 获取 AI 分析历史
+      operationId: getAIHistory
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 20
+            maximum: 100
+      responses:
+        '200':
+          description: 历史记录列表
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AIAnalysisHistory'
+
+  # ========== Fragment Relations ==========
+  /relations/analyze:
+    post:
+      tags:
+        - Relations
+      summary: AI 分析碎片关联
+      description: 使用 AI 分析碎片之间的潜在关联关系
+      operationId: analyzeRelations
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RelationAnalyzeRequest'
+      responses:
+        '200':
+          description: 关联分析结果
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RelationAnalyzeResult'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /relations/suggestions:
+    get:
+      tags:
+        - Relations
+      summary: 获取关联推荐
+      description: 获取 AI 推荐的碎片关联建议
+      operationId: getRelationSuggestions
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 10
+            maximum: 50
+      responses:
+        '200':
+          description: 关联推荐列表
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RelationSuggestions'
+
+  /relations:
+    get:
+      tags:
+        - Relations
+      summary: 获取所有关联
+      description: 获取用户确认的所有碎片关联
+      operationId: getRelations
+      responses:
+        '200':
+          description: 关联列表
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/FragmentRelation'
+
+    post:
+      tags:
+        - Relations
+      summary: 创建关联
+      description: 手动创建碎片之间的关联
+      operationId: createRelation
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateRelationRequest'
+      responses:
+        '201':
+          description: 创建成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FragmentRelation'
+
+  /relations/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+
+    delete:
+      tags:
+        - Relations
+      summary: 删除关联
+      operationId: deleteRelation
+      responses:
+        '204':
+          description: 删除成功
+
+  /relations/suggestions/{id}/accept:
+    post:
+      tags:
+        - Relations
+      summary: 接受关联推荐
+      description: 将 AI 推荐的关联转为正式关联
+      operationId: acceptRelationSuggestion
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 接受成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FragmentRelation'
+
+  /relations/suggestions/{id}/reject:
+    post:
+      tags:
+        - Relations
+      summary: 拒绝关联推荐
+      description: 拒绝 AI 推荐的关联
+      operationId: rejectRelationSuggestion
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: 拒绝成功
+
+  /relations/groups:
+    get:
+      tags:
+        - Relations
+      summary: 获取智能分组
+      description: AI 自动分组的建议
+      operationId: getSmartGroups
+      responses:
+        '200':
+          description: 分组列表
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/SmartGroup'
+
+  /relations/timeline:
+    get:
+      tags:
+        - Relations
+      summary: 获取叙事时间线
+      description: AI 分析的叙事时间线
+      operationId: getTimeline
+      responses:
+        '200':
+          description: 时间线数据
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TimelineData'
+
+  /relations/themes:
+    get:
+      tags:
+        - Relations
+      summary: 获取主题聚类
+      description: AI 提取的主题聚类
+      operationId: getThemeClusters
+      responses:
+        '200':
+          description: 主题聚类列表
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ThemeCluster'
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      description: Supabase JWT Token
+    CookieAuth:
+      type: apiKey
+      in: cookie
+      name: sb-access-token
+
+  schemas:
+    # ========== Core Entities ==========
+    Fragment:
+      type: object
+      required:
+        - id
+        - content
+        - user_id
+        - sort_order
+        - created_at
+        - updated_at
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: 碎片唯一标识
+        content:
+          type: string
+          minLength: 1
+          maxLength: 10000
+          description: 灵感内容
+        story_id:
+          type: string
+          format: uuid
+          nullable: true
+          description: 所属故事 ID
+        story:
+          $ref: '#/components/schemas/Story'
+          description: 关联的故事信息
+        tags:
+          type: array
+          items:
+            $ref: '#/components/schemas/Tag'
+          description: 关联的标签列表
+        user_id:
+          type: string
+          format: uuid
+          description: 创建者 ID
+        sort_order:
+          type: integer
+          default: 0
+          description: 排序权重
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    Story:
+      type: object
+      required:
+        - id
+        - title
+        - color
+        - user_id
+        - created_at
+        - updated_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        title:
+          type: string
+          minLength: 1
+          maxLength: 100
+        description:
+          type: string
+          maxLength: 500
+          nullable: true
+        color:
+          type: string
+          pattern: '^#[0-9a-fA-F]{6}$'
+          description: 故事主题色（十六进制）
+          example: "#3b82f6"
+        user_id:
+          type: string
+          format: uuid
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    Tag:
+      type: object
+      required:
+        - id
+        - name
+        - color
+        - user_id
+        - created_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+          minLength: 1
+          maxLength: 50
+          description: 标签名称（唯一）
+        color:
+          type: string
+          pattern: '^#[0-9a-fA-F]{6}$'
+          description: 标签颜色
+          example: "#10b981"
+        user_id:
+          type: string
+          format: uuid
+        created_at:
+          type: string
+          format: date-time
+
+    # ========== AI Related ==========
+    AIAnalyzeRequest:
+      type: object
+      required:
+        - fragments
+        - targetFragment
+      properties:
+        fragments:
+          type: array
+          minItems: 1
+          maxItems: 50
+          items:
+            type: object
+            required:
+              - id
+              - content
+            properties:
+              id:
+                type: string
+                format: uuid
+              content:
+                type: string
+        targetFragment:
+          type: object
+          required:
+            - id
+            - content
+          properties:
+            id:
+              type: string
+              format: uuid
+            content:
+              type: string
+
+    AIAnalysisResult:
+      type: object
+      required:
+        - groups
+        - suggestions
+      properties:
+        groups:
+          type: array
+          items:
+            $ref: '#/components/schemas/AIGroup'
+        suggestions:
+          type: array
+          items:
+            type: string
+          minItems: 1
+          maxItems: 5
+          description: AI 提供的创作建议
+
+    AIGroup:
+      type: object
+      required:
+        - label
+        - fragmentIds
+      properties:
+        label:
+          type: string
+          description: 有故事感的线索名称
+          example: "被折叠的午后"
+        fragmentIds:
+          type: array
+          items:
+            type: string
+            format: uuid
+
+    AIAnalysisHistory:
+      type: object
+      required:
+        - id
+        - fragment_ids
+        - result
+        - user_id
+        - created_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        fragment_ids:
+          type: array
+          items:
+            type: string
+            format: uuid
+        target_fragment_id:
+          type: string
+          format: uuid
+          nullable: true
+        result:
+          $ref: '#/components/schemas/AIAnalysisResult'
+        raw_text:
+          type: string
+          nullable: true
+          description: AI 原始响应文本
+        user_id:
+          type: string
+          format: uuid
+        created_at:
+          type: string
+          format: date-time
+
+    # ========== Search Related ==========
+    SearchResult:
+      type: object
+      required:
+        - fragments
+        - total
+        - query
+      properties:
+        fragments:
+          type: array
+          items:
+            $ref: '#/components/schemas/Fragment'
+        total:
+          type: integer
+          description: 总结果数
+        query:
+          type: string
+          description: 搜索关键词
+        has_more:
+          type: boolean
+          description: 是否有更多结果
+
+    SearchSuggestions:
+      type: object
+      required:
+        - stories
+        - tags
+      properties:
+        stories:
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: string
+                format: uuid
+              title:
+                type: string
+              color:
+                type: string
+        tags:
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: string
+                format: uuid
+              name:
+                type: string
+              color:
+                type: string
+
+    # ========== Request Bodies ==========
+    CreateFragmentRequest:
+      type: object
+      required:
+        - content
+      properties:
+        content:
+          type: string
+          minLength: 1
+          maxLength: 10000
+        story_id:
+          type: string
+          format: uuid
+          nullable: true
+        tag_ids:
+          type: array
+          items:
+            type: string
+            format: uuid
+
+    UpdateFragmentRequest:
+      type: object
+      properties:
+        content:
+          type: string
+          minLength: 1
+          maxLength: 10000
+        story_id:
+          type: string
+          format: uuid
+          nullable: true
+        sort_order:
+          type: integer
+
+    CreateStoryRequest:
+      type: object
+      required:
+        - title
+      properties:
+        title:
+          type: string
+          minLength: 1
+          maxLength: 100
+        description:
+          type: string
+          maxLength: 500
+        color:
+          type: string
+          pattern: '^#[0-9a-fA-F]{6}$'
+          default: "#171717"
+
+    UpdateStoryRequest:
+      type: object
+      properties:
+        title:
+          type: string
+          minLength: 1
+          maxLength: 100
+        description:
+          type: string
+          maxLength: 500
+        color:
+          type: string
+          pattern: '^#[0-9a-fA-F]{6}$'
+
+    CreateTagRequest:
+      type: object
+      required:
+        - name
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 50
+        color:
+          type: string
+          pattern: '^#[0-9a-fA-F]{6}$'
+          default: "#6b7280"
+
+    BatchUpdateFragmentsRequest:
+      type: object
+      required:
+        - ids
+        - action
+      properties:
+        ids:
+          type: array
+          items:
+            type: string
+            format: uuid
+          minItems: 1
+          maxItems: 100
+          description: 要更新的碎片 ID 列表
+        action:
+          type: string
+          enum: [move_to_story, add_tags, remove_tags]
+          description: 批量操作类型
+        story_id:
+          type: string
+          format: uuid
+          nullable: true
+          description: 目标故事 ID（action 为 move_to_story 时必填）
+        tag_ids:
+          type: array
+          items:
+            type: string
+            format: uuid
+          description: 要添加/移除的标签 ID 列表（action 为 add_tags/remove_tags 时必填）
+
+    # ========== Relation Schemas ==========
+    FragmentRelation:
+      type: object
+      required:
+        - id
+        - source_fragment_id
+        - target_fragment_id
+        - relation_type
+        - user_id
+        - created_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        source_fragment_id:
+          type: string
+          format: uuid
+          description: 源碎片 ID
+        target_fragment_id:
+          type: string
+          format: uuid
+          description: 目标碎片 ID
+        relation_type:
+          type: string
+          enum: [similar, contrast, sequence, causal, thematic, emotional, reference, custom]
+          description: 关联类型
+        strength:
+          type: number
+          minimum: 0
+          maximum: 1
+          description: 关联强度 0-1
+        description:
+          type: string
+          description: 关联描述
+        ai_generated:
+          type: boolean
+          description: 是否由 AI 生成
+        ai_confidence:
+          type: number
+          minimum: 0
+          maximum: 1
+          description: AI 置信度
+        user_id:
+          type: string
+          format: uuid
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    CreateRelationRequest:
+      type: object
+      required:
+        - source_fragment_id
+        - target_fragment_id
+        - relation_type
+      properties:
+        source_fragment_id:
+          type: string
+          format: uuid
+        target_fragment_id:
+          type: string
+          format: uuid
+        relation_type:
+          type: string
+          enum: [similar, contrast, sequence, causal, thematic, emotional, reference, custom]
+        strength:
+          type: number
+          minimum: 0
+          maximum: 1
+        description:
+          type: string
+
+    RelationAnalyzeRequest:
+      type: object
+      required:
+        - fragment_ids
+      properties:
+        fragment_ids:
+          type: array
+          items:
+            type: string
+            format: uuid
+          minItems: 2
+          maxItems: 50
+          description: 要分析的碎片 ID 列表
+        analysis_depth:
+          type: string
+          enum: [basic, deep]
+          default: basic
+          description: 分析深度
+
+    RelationAnalyzeResult:
+      type: object
+      required:
+        - relations
+        - groups
+        - timeline
+        - themes
+      properties:
+        relations:
+          type: array
+          items:
+            $ref: '#/components/schemas/FragmentRelation'
+        groups:
+          type: array
+          items:
+            $ref: '#/components/schemas/SmartGroup'
+        timeline:
+          $ref: '#/components/schemas/TimelineData'
+        themes:
+          type: array
+          items:
+            $ref: '#/components/schemas/ThemeCluster'
+        suggestions:
+          type: array
+          items:
+            $ref: '#/components/schemas/RelationSuggestion'
+
+    RelationSuggestion:
+      type: object
+      required:
+        - id
+        - source_fragment_id
+        - target_fragment_id
+        - relation_type
+        - confidence
+      properties:
+        id:
+          type: string
+        source_fragment_id:
+          type: string
+          format: uuid
+        target_fragment_id:
+          type: string
+          format: uuid
+        source_fragment:
+          type: object
+          properties:
+            id:
+              type: string
+            content:
+              type: string
+        target_fragment:
+          type: object
+          properties:
+            id:
+              type: string
+            content:
+              type: string
+        relation_type:
+          type: string
+          enum: [similar, contrast, sequence, causal, thematic, emotional, reference]
+        confidence:
+          type: number
+          minimum: 0
+          maximum: 1
+        reason:
+          type: string
+          description: AI 推荐理由
+        status:
+          type: string
+          enum: [pending, accepted, rejected]
+
+    RelationSuggestions:
+      type: object
+      required:
+        - suggestions
+        - total_pending
+      properties:
+        suggestions:
+          type: array
+          items:
+            $ref: '#/components/schemas/RelationSuggestion'
+        total_pending:
+          type: integer
+          description: 待处理的推荐数量
+
+    SmartGroup:
+      type: object
+      required:
+        - id
+        - name
+        - fragment_ids
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+          description: AI 生成的组名
+        description:
+          type: string
+          description: 组的描述
+        fragment_ids:
+          type: array
+          items:
+            type: string
+            format: uuid
+        tags:
+          type: array
+          items:
+            type: string
+          description: 组的主题标签
+        color:
+          type: string
+          description: 组的颜色
+        confidence:
+          type: number
+          minimum: 0
+          maximum: 1
+        key_themes:
+          type: array
+          items:
+            type: string
+
+    TimelineData:
+      type: object
+      required:
+        - events
+        - gaps
+      properties:
+        events:
+          type: array
+          items:
+            type: object
+            properties:
+              fragment_id:
+                type: string
+                format: uuid
+              position:
+                type: number
+              estimated_time:
+                type: string
+                nullable: true
+              narrative_role:
+                type: string
+                enum: [setup, inciting, rising, climax, falling, resolution]
+              connections:
+                type: object
+                properties:
+                  before:
+                    type: array
+                    items:
+                      type: string
+                  after:
+                    type: array
+                    items:
+                      type: string
+        gaps:
+          type: array
+          items:
+            type: object
+            properties:
+              after_fragment_id:
+                type: string
+              before_fragment_id:
+                type: string
+              description:
+                type: string
+              suggestion:
+                type: string
+
+    ThemeCluster:
+      type: object
+      required:
+        - id
+        - name
+        - keywords
+        - fragment_ids
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        level:
+          type: string
+          enum: [primary, secondary, tertiary]
+        keywords:
+          type: array
+          items:
+            type: string
+        fragment_ids:
+          type: array
+          items:
+            type: string
+            format: uuid
+        related_themes:
+          type: array
+          items:
+            type: string
+        heat_score:
+          type: number
+          description: 热度分数（碎片数量）
+
+    # ========== Error Schemas ==========
+    Error:
+      type: object
+      required:
+        - error
+      properties:
+        error:
+          type: string
+        message:
+          type: string
+        code:
+          type: string
+
+  responses:
+    BadRequest:
+      description: 请求参数错误
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error: "Bad Request"
+            message: "Content is required"
+            code: "VALIDATION_ERROR"
+
+    Unauthorized:
+      description: 未授权，需要登录
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error: "Unauthorized"
+            message: "Authentication required"
+            code: "AUTH_REQUIRED"
+
+    NotFound:
+      description: 资源不存在
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error: "Not Found"
+            message: "Fragment not found"
+            code: "RESOURCE_NOT_FOUND"
+
+    InternalError:
+      description: 服务器内部错误
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error: "Internal Server Error"
+            message: "Something went wrong"
+            code: "INTERNAL_ERROR"

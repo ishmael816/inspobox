@@ -397,3 +397,294 @@ export async function deleteAIHistory(id: string): Promise<void> {
 
   if (error) throw error;
 }
+
+// ==================== Search ====================
+
+export interface SearchResult {
+  fragments: Fragment[];
+  total: number;
+  query: string;
+  has_more: boolean;
+}
+
+export interface SearchSuggestions {
+  stories: { id: string; title: string; color: string }[];
+  tags: { id: string; name: string; color: string }[];
+}
+
+export async function searchFragments(
+  query: string,
+  options?: {
+    storyId?: string;
+    limit?: number;
+    offset?: number;
+  }
+): Promise<SearchResult> {
+  const params = new URLSearchParams();
+  params.set("q", query);
+  if (options?.storyId) params.set("story_id", options.storyId);
+  if (options?.limit) params.set("limit", options.limit.toString());
+  if (options?.offset) params.set("offset", options.offset.toString());
+  
+  const response = await fetch(`/api/search?${params.toString()}`);
+  
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.error || "Search failed");
+  }
+  
+  return response.json();
+}
+
+export async function getSearchSuggestions(query: string): Promise<SearchSuggestions> {
+  if (!query.trim()) {
+    return { stories: [], tags: [] };
+  }
+  
+  const response = await fetch(`/api/search/suggestions?q=${encodeURIComponent(query)}`);
+  
+  if (!response.ok) {
+    return { stories: [], tags: [] };
+  }
+  
+  return response.json();
+}
+
+// ==================== Batch Operations ====================
+
+export interface BatchUpdateResult {
+  updated: number;
+  failed: number;
+  action: string;
+  total: number;
+}
+
+export async function batchUpdateFragments(
+  ids: string[],
+  action: "move_to_story" | "add_tags" | "remove_tags",
+  options?: {
+    storyId?: string | null;
+    tagIds?: string[];
+  }
+): Promise<BatchUpdateResult> {
+  const response = await fetch("/api/fragments/batch-update", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      ids,
+      action,
+      story_id: options?.storyId,
+      tag_ids: options?.tagIds
+    })
+  });
+
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.error || "Batch update failed");
+  }
+
+  return response.json();
+}
+
+export async function batchMoveToStory(
+  fragmentIds: string[],
+  storyId: string | null
+): Promise<BatchUpdateResult> {
+  return batchUpdateFragments(fragmentIds, "move_to_story", { storyId });
+}
+
+export async function batchAddTags(
+  fragmentIds: string[],
+  tagIds: string[]
+): Promise<BatchUpdateResult> {
+  return batchUpdateFragments(fragmentIds, "add_tags", { tagIds });
+}
+
+export async function batchRemoveTags(
+  fragmentIds: string[],
+  tagIds: string[]
+): Promise<BatchUpdateResult> {
+  return batchUpdateFragments(fragmentIds, "remove_tags", { tagIds });
+}
+
+// ==================== Fragment Relations ====================
+
+export interface FragmentRelation {
+  id: string;
+  source_fragment_id: string;
+  target_fragment_id: string;
+  relation_type: 'similar' | 'contrast' | 'sequence' | 'causal' | 'thematic' | 'emotional' | 'reference' | 'custom';
+  strength: number;
+  description?: string;
+  ai_generated: boolean;
+  ai_confidence?: number;
+  source_fragment?: { id: string; content: string };
+  target_fragment?: { id: string; content: string };
+  created_at: string;
+}
+
+export interface RelationSuggestion {
+  id: string;
+  source_fragment_id: string;
+  target_fragment_id: string;
+  source_preview?: string;
+  target_preview?: string;
+  relation_type: string;
+  confidence: number;
+  reason?: string;
+  status: 'pending' | 'accepted' | 'rejected';
+}
+
+export interface SmartGroup {
+  id: string;
+  name: string;
+  description: string;
+  fragment_ids: string[];
+  tags: string[];
+  color: string;
+  confidence: number;
+  key_themes: string[];
+}
+
+export interface TimelineEvent {
+  fragment_id: string;
+  position: number;
+  estimated_time?: string;
+  narrative_role: 'setup' | 'inciting' | 'rising' | 'climax' | 'falling' | 'resolution';
+  connections: { before: string[]; after: string[] };
+}
+
+export interface TimelineGap {
+  after_fragment_id: string;
+  before_fragment_id: string;
+  description: string;
+  suggestion: string;
+}
+
+export interface ThemeCluster {
+  id: string;
+  name: string;
+  level: 'primary' | 'secondary' | 'tertiary';
+  keywords: string[];
+  fragment_ids: string[];
+  related_themes?: string[];
+  heat_score: number;
+}
+
+export interface RelationAnalysisResult {
+  relations: FragmentRelation[];
+  groups: SmartGroup[];
+  timeline: { events: TimelineEvent[]; gaps: TimelineGap[] };
+  themes: ThemeCluster[];
+  suggestions: RelationSuggestion[];
+}
+
+// 获取关联列表
+export async function getRelations(fragmentId?: string): Promise<FragmentRelation[]> {
+  const params = fragmentId ? `?fragment_id=${fragmentId}` : '';
+  const response = await fetch(`/api/relations${params}`);
+  
+  if (!response.ok) {
+    throw new Error('Failed to fetch relations');
+  }
+  
+  return response.json();
+}
+
+// 创建关联
+export async function createRelation(
+  sourceId: string,
+  targetId: string,
+  type: string,
+  strength?: number,
+  description?: string
+): Promise<FragmentRelation> {
+  const response = await fetch('/api/relations', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      source_fragment_id: sourceId,
+      target_fragment_id: targetId,
+      relation_type: type,
+      strength,
+      description
+    })
+  });
+  
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.error || 'Failed to create relation');
+  }
+  
+  return response.json();
+}
+
+// 删除关联
+export async function deleteRelation(relationId: string): Promise<void> {
+  const response = await fetch(`/api/relations/${relationId}`, {
+    method: 'DELETE'
+  });
+  
+  if (!response.ok) {
+    throw new Error('Failed to delete relation');
+  }
+}
+
+// 获取关联推荐
+export async function getRelationSuggestions(limit: number = 10): Promise<{
+  suggestions: RelationSuggestion[];
+  total_pending: number;
+}> {
+  const response = await fetch(`/api/relations/suggestions?limit=${limit}`);
+  
+  if (!response.ok) {
+    throw new Error('Failed to fetch suggestions');
+  }
+  
+  return response.json();
+}
+
+// 接受推荐
+export async function acceptRelationSuggestion(suggestionId: string): Promise<FragmentRelation> {
+  const response = await fetch('/api/relations/suggestions/accept', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ suggestion_id: suggestionId })
+  });
+  
+  if (!response.ok) {
+    throw new Error('Failed to accept suggestion');
+  }
+  
+  return response.json();
+}
+
+// 拒绝推荐
+export async function rejectRelationSuggestion(suggestionId: string): Promise<void> {
+  const response = await fetch('/api/relations/suggestions/reject', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ suggestion_id: suggestionId })
+  });
+  
+  if (!response.ok) {
+    throw new Error('Failed to reject suggestion');
+  }
+}
+
+// 保存批量推荐（用于AI分析后）
+export async function saveRelationSuggestions(
+  suggestions: Omit<RelationSuggestion, 'id' | 'status'>[]
+): Promise<{ saved: number }> {
+  const response = await fetch('/api/relations/suggestions', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ suggestions })
+  });
+  
+  if (!response.ok) {
+    throw new Error('Failed to save suggestions');
+  }
+  
+  return response.json();
+}

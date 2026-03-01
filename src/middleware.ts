@@ -70,4 +70,6 @@ export const config = {
      */
     "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
   ],
+  // 使用 Node.js runtime 而不是 Edge Runtime（解决 Windows 网络问题）
+  runtime: "nodejs",
 };
