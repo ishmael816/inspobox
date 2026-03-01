@@ -3,6 +3,7 @@ import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import { ANALYZE_SYSTEM_PROMPT, createAnalyzeUserPrompt, AI_CONFIG } from "@/lib/prompts";
 
 export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
 // 创建阿里云 DashScope provider
 const dashscope = createOpenAICompatible({
